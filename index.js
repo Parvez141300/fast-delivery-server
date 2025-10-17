@@ -2,7 +2,7 @@
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -31,6 +31,27 @@ async function run() {
         const db = client.db('parcelsDB');
         const parcelsCollection = db.collection("parcels");
 
+        // (parcels related apis)
+
+        // get users own parcels
+        app.get("/parcels/user", async (req, res) => {
+            const userEmail = req.query.email;
+            if (!userEmail) {
+                return res.status(400).send({ message: "Email is required" });
+            }
+            const sortField = { creationDate: -1 }
+            const parcels = await parcelsCollection.find({ createdBy: userEmail }).sort(sortField).toArray();
+            res.send(parcels);
+        });
+
+        // get single parcel by id
+        app.get('/parcels/:parcelId', async (req, res) => {
+            const { parcelId } = req.params;
+            const filter = { _id: new ObjectId(parcelId) };
+            const parcel = await parcelsCollection.findOne(filter);
+            res.send(parcel)
+        })
+
         // get all parcels
         app.get("/parcels", async (req, res) => {
             const parcels = await parcelsCollection.find().toArray();
@@ -42,6 +63,13 @@ async function run() {
             const newParcel = req.body;
             const result = await parcelsCollection.insertOne(newParcel);
             res.send(result);
+        });
+
+        // delete a parcel
+        app.delete("/parcels/:parcelId", async (req, res) => {
+            const { parcelId } = req.params;
+            const result = await parcelsCollection.deleteOne({ _id: new ObjectId(parcelId) });
+            res.send(result)
         });
 
 

@@ -6,6 +6,9 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 const app = express();
 const port = process.env.PORT || 5000;
+// This is your test secret API key.
+const stripe = require("stripe")(process.env.Stripe_Payment_Secret);
+
 
 // Middleware
 app.use(cors());
@@ -70,6 +73,34 @@ async function run() {
             const { parcelId } = req.params;
             const result = await parcelsCollection.deleteOne({ _id: new ObjectId(parcelId) });
             res.send(result)
+        });
+
+
+        //  payment related apis
+
+        
+
+        // stripe Create payment intent endpoint
+        app.post("/create-payment-intent", async (req, res) => {
+            const { amountInCents, parcelId } = req.body;
+
+            if (!parcelId) {
+                return res.status(400).send({ message: "Parcel ID required" });
+            }
+
+            // Create a PaymentIntent with the order amount and currency
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amountInCents,
+                currency: "usd",
+                // In the latest version of the API, specifying the `automatic_payment_methods` parameter is optional because Stripe enables its functionality by default.
+                automatic_payment_methods: {
+                    enabled: true,
+                },
+            });
+
+            res.send({
+                clientSecret: paymentIntent.client_secret,
+            });
         });
 
 

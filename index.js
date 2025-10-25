@@ -33,18 +33,39 @@ async function run() {
     try {
         const db = client.db('parcelsDB');
         const parcelsCollection = db.collection("parcels");
+        const paymentsCollection = db.collection("payments");
+        const usersCollection = db.collection("users");
 
         // (parcels related apis)
 
         // get users own parcels
         app.get("/parcels/user", async (req, res) => {
             const userEmail = req.query.email;
+            const page = parseInt(req.query.page);
+            const limit = parseInt(req.query.limit);
+            const skip = (page - 1) * limit;
+            const search = req.query.search;
+
+            const query = {
+                createdBy: userEmail,
+                ...(search && {
+                    $or: [
+                        { title: { $regex: search, $options: "i" } },
+                        { senderContact: { $regex: search, $options: "i" } },
+                        { trackingId: { $regex: search, $options: "i" } },
+                        { status: { $regex: search, $options: "i" } },
+                        { senderName: { $regex: search, $options: "i" } },
+                    ]
+                })
+            }
+
             if (!userEmail) {
                 return res.status(400).send({ message: "Email is required" });
             }
             const sortField = { creationDate: -1 }
-            const parcels = await parcelsCollection.find({ createdBy: userEmail }).sort(sortField).toArray();
-            res.send(parcels);
+            const parcels = await parcelsCollection.find(query).sort(sortField).skip(skip).limit(limit).toArray();
+            const totalParcels = await parcelsCollection.estimatedDocumentCount(query)
+            res.send({ parcels, totalParcels });
         });
 
         // get single parcel by id
@@ -76,9 +97,51 @@ async function run() {
         });
 
 
-        //  payment related apis
+        //  (payment related apis)
 
-        
+        // get all payment history for admin
+        app.get('/payments', async (req, res) => {
+            const result = await paymentsCollection.find({ createdAt: -1 }).toArray();
+            res.send(result);
+        });
+
+        // get user payment history
+        app.get('/payments/user', async (req, res) => {
+            const userEmail = req.query.email;
+
+            const result = await paymentsCollection.find({ userEmail: userEmail }).toArray();
+
+            res.send(result);
+        });
+
+        // update parcel payment status
+        app.patch("/parcels/payment/:parcelId", async (req, res) => {
+            const { parcelId } = req.params;
+            const filter = { _id: new ObjectId(parcelId) };
+
+            const update = {
+                $set: {
+                    paymentStatus: 'paid'
+                }
+            }
+
+            const result = await parcelsCollection.updateOne(filter, update);
+
+            res.send(result)
+        });
+
+        // post a parcel payment
+        app.post("/payments", async (req, res) => {
+            const paymentRecord = req.body;
+
+            const isExistRecord = await paymentsCollection.findOne(paymentRecord.parcelId);
+            if (isExistRecord) {
+                return res.status(403).send({ message: 'forbidden action' })
+            };
+
+            const result = await paymentsCollection.insertOne(paymentRecord);
+            res.send(result);
+        });
 
         // stripe Create payment intent endpoint
         app.post("/create-payment-intent", async (req, res) => {
@@ -103,7 +166,23 @@ async function run() {
             });
         });
 
+        // (users related api)
 
+        // post user info in db
+        app.post("/users", async (req, res) => {
+            const user = req.body;
+            const query = { email: user.email };
+
+            const isExistingUser = await usersCollection.findOne(query);
+            if (isExistingUser) {
+                return res.send({ message: "User already exists", insertedId: null });
+            }
+
+            const result = await usersCollection.insertOne(user);
+            res.send(result);
+        })
+
+        
 
         // Connect the client to the server	(optional starting in v4.7)
         await client.connect();

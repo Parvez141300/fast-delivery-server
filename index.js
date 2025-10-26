@@ -8,11 +8,51 @@ const app = express();
 const port = process.env.PORT || 5000;
 // This is your test secret API key.
 const stripe = require("stripe")(process.env.Stripe_Payment_Secret);
+// for jwt
+const cookieParser = require('cookie-parser');
+const jwt = require('jsonwebtoken');
+const admin = require('firebase-admin');
+const path = require('path');
+const serviceAccount = require(process.env.FIREBASE_SERVICE_ACCOUNT_PATH)
 
+// initialize firebase admin
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+});
 
 // Middleware
-app.use(cors());
 app.use(express.json());
+app.use(cors());
+
+
+// Verify Firebase Token Middleware
+const verifyFirebaseToken = async (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).send({ message: 'Unauthorized' });
+    }
+    const token = authHeader.split(' ')[1];
+    try {
+        const decoded = await admin.auth().verifyIdToken(token);
+        req.user = decoded; // Firebase user info
+        next();
+    } catch (err) {
+        res.status(401).send({ message: 'Invalid token' });
+    }
+};
+
+// Role Middleware
+const verifyRole = (allowedRoles) => async (req, res, next) => {
+    const userEmail = req.user?.email;
+    console.log('user email for verify role', userEmail);
+    const user = await req.app.locals.usersCollection.findOne({ email: userEmail });
+    console.log('found the user data', user);
+    if (!user || !allowedRoles.includes(user.role)) {
+        return res.status(403).send({ message: 'Forbidden' });
+    }
+    req.userRole = user.role;
+    next();
+};
 
 // DB_USER=fast_delivery_user
 // DB_PASS=CfN5gObfcL4K6YJf
@@ -36,10 +76,17 @@ async function run() {
         const paymentsCollection = db.collection("payments");
         const usersCollection = db.collection("users");
 
+        // access the database collection global
+        app.locals.usersCollection = usersCollection;
+        app.locals.paymentsCollection = paymentsCollection;
+        app.locals.parcelsCollection = parcelsCollection;
+
+        
+
         // (parcels related apis)
 
         // get users own parcels
-        app.get("/parcels/user", async (req, res) => {
+        app.get("/parcels/user", verifyFirebaseToken, verifyRole("user"), async (req, res) => {
             const userEmail = req.query.email;
             const page = parseInt(req.query.page);
             const limit = parseInt(req.query.limit);
@@ -182,7 +229,7 @@ async function run() {
             res.send(result);
         })
 
-        
+
 
         // Connect the client to the server	(optional starting in v4.7)
         await client.connect();

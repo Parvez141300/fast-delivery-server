@@ -8,11 +8,8 @@ const app = express();
 const port = process.env.PORT || 5000;
 // This is your test secret API key.
 const stripe = require("stripe")(process.env.Stripe_Payment_Secret);
-// for jwt
-const cookieParser = require('cookie-parser');
-const jwt = require('jsonwebtoken');
+// firebase admin token
 const admin = require('firebase-admin');
-const path = require('path');
 const serviceAccount = require(process.env.FIREBASE_SERVICE_ACCOUNT_PATH)
 
 // initialize firebase admin
@@ -44,9 +41,7 @@ const verifyFirebaseToken = async (req, res, next) => {
 // Role Middleware
 const verifyRole = (allowedRoles) => async (req, res, next) => {
     const userEmail = req.user?.email;
-    console.log('user email for verify role', userEmail);
     const user = await req.app.locals.usersCollection.findOne({ email: userEmail });
-    console.log('found the user data', user);
     if (!user || !allowedRoles.includes(user.role)) {
         return res.status(403).send({ message: 'Forbidden' });
     }
@@ -81,7 +76,7 @@ async function run() {
         app.locals.paymentsCollection = paymentsCollection;
         app.locals.parcelsCollection = parcelsCollection;
 
-        
+
 
         // (parcels related apis)
 
@@ -153,7 +148,7 @@ async function run() {
         });
 
         // get user payment history
-        app.get('/payments/user', async (req, res) => {
+        app.get('/payments/user', verifyFirebaseToken, verifyRole("user"), async (req, res) => {
             const userEmail = req.query.email;
 
             const result = await paymentsCollection.find({ userEmail: userEmail }).toArray();

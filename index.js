@@ -70,18 +70,20 @@ async function run() {
         const parcelsCollection = db.collection("parcels");
         const paymentsCollection = db.collection("payments");
         const usersCollection = db.collection("users");
+        const ridersCollection = db.collection("riders");
 
         // access the database collection global
         app.locals.usersCollection = usersCollection;
         app.locals.paymentsCollection = paymentsCollection;
         app.locals.parcelsCollection = parcelsCollection;
+        app.locals.ridersCollection = ridersCollection;
 
 
 
         // (parcels related apis)
 
         // get users own parcels
-        app.get("/parcels/user", verifyFirebaseToken, verifyRole("user"), async (req, res) => {
+        app.get("/parcels/user", async (req, res) => {
             const userEmail = req.query.email;
             const page = parseInt(req.query.page);
             const limit = parseInt(req.query.limit);
@@ -148,7 +150,7 @@ async function run() {
         });
 
         // get user payment history
-        app.get('/payments/user', verifyFirebaseToken, verifyRole("user"), async (req, res) => {
+        app.get('/payments/user', async (req, res) => {
             const userEmail = req.query.email;
 
             const result = await paymentsCollection.find({ userEmail: userEmail }).toArray();
@@ -176,7 +178,7 @@ async function run() {
         app.post("/payments", async (req, res) => {
             const paymentRecord = req.body;
 
-            const isExistRecord = await paymentsCollection.findOne(paymentRecord.parcelId);
+            const isExistRecord = await paymentsCollection.findOne({ _id: new ObjectId(paymentRecord.parcelId) });
             if (isExistRecord) {
                 return res.status(403).send({ message: 'forbidden action' })
             };
@@ -208,7 +210,7 @@ async function run() {
             });
         });
 
-        // (users related api)
+        // (users related apis)
 
         // post user info in db
         app.post("/users", async (req, res) => {
@@ -224,6 +226,26 @@ async function run() {
             res.send(result);
         })
 
+        // (riders related apis)
+
+        // post rider info in db
+        app.post("/riders", async (req, res) => {
+            const riderData = req.body;
+
+            const isExisted = await ridersCollection.findOne({ email: riderData.email });
+
+            if (!riderData.email) {
+                return res.status(404).send({ message: "data does not exists" })
+            }
+
+            if (isExisted) {
+                return res.status(409).send({ message: "data already exists" })
+            }
+
+            const result = await ridersCollection.insertOne(riderData);
+
+            res.status(201).send(result);
+        })
 
 
         // Connect the client to the server	(optional starting in v4.7)

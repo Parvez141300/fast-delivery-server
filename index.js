@@ -212,6 +212,18 @@ async function run() {
 
         // (users related apis)
 
+        // get single user info
+        app.get("/users", async (req, res) => {
+            const { email } = req.query;
+
+            if (!email) {
+                return res.status(404).send({ message: "user not found" });
+            }
+            const filter = { email: email }
+            const result = await usersCollection.findOne(filter);
+            res.status(200).send(result);
+        })
+
         // post user info in db
         app.post("/users", async (req, res) => {
             const user = req.body;
@@ -227,6 +239,17 @@ async function run() {
         })
 
         // (riders related apis)
+
+        // get single rider info
+        app.get('/riders', async (req, res) => {
+            const { email } = req.query;
+            if (!email) {
+                return res.status(404).send({ message: "user not found" });
+            }
+            const filter = { email: email }
+            const result = await ridersCollection.findOne(filter);
+            res.status(200).send(result);
+        });
 
         // post rider info in db
         app.post("/riders", async (req, res) => {

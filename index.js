@@ -240,6 +240,13 @@ async function run() {
 
         // (riders related apis)
 
+        // get all pending riders
+        app.get('/riders/pending', async (req, res) => {
+            const filter = { status: "pending" };
+            const result = await ridersCollection.find(filter).sort({ createdAt: -1 }).toArray();
+            res.status(200).send(result);
+        })
+
         // get single rider info
         app.get('/riders', async (req, res) => {
             const { email } = req.query;
@@ -250,6 +257,19 @@ async function run() {
             const result = await ridersCollection.findOne(filter);
             res.status(200).send(result);
         });
+
+        // update rider pending to active
+        app.patch("/riders/pending/:riderId", async (req, res) => {
+            const { riderId } = req.params;
+            const filter = { _id: new ObjectId(riderId) };
+            const update = {
+                $set: {
+                    status: "active"
+                }
+            };
+            const result = await ridersCollection.updateOne(filter, update);
+            res.status(200).send(result);
+        })
 
         // post rider info in db
         app.post("/riders", async (req, res) => {
@@ -268,6 +288,14 @@ async function run() {
             const result = await ridersCollection.insertOne(riderData);
 
             res.status(201).send(result);
+        })
+
+        // delete a rider
+        app.delete("/riders/:riderId", async (req, res) => {
+            const { riderId } = req.params;
+            const filter = { _id: new ObjectId(riderId) };
+            const result = await ridersCollection.deleteOne(filter);
+            res.status(204).send(result);
         })
 
 

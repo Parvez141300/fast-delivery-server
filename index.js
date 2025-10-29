@@ -82,7 +82,7 @@ async function run() {
 
         // (parcels related apis)
 
-        // get users own parcels
+        // get users own parcels and search parcel and pagination
         app.get("/parcels/user", async (req, res) => {
             const userEmail = req.query.email;
             const page = parseInt(req.query.page);
@@ -240,11 +240,25 @@ async function run() {
 
         // (riders related apis)
 
-        // get all pending riders
+        // get all pending riders and search pending riders and pagination
         app.get('/riders/pending', async (req, res) => {
-            const filter = { status: "pending" };
-            const result = await ridersCollection.find(filter).sort({ createdAt: -1 }).toArray();
-            res.status(200).send(result);
+            const page = parseInt(req.query.page);
+            const limit = parseInt(req.query.limit);
+            const search = req.query.search;
+            const skip = (page - 1) * limit;
+
+            const query = {
+                status: "pending",
+                ...(search && {
+                    $or: [
+                        { email: { $regex: search, $options: "i" } },
+                        { phone: { $regex: search, $options: "i" } },
+                    ]
+                })
+            };
+            const result = await ridersCollection.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray();
+            const countRiders = await ridersCollection.estimatedDocumentCount(query);
+            res.status(200).send({ result, countRiders });
         })
 
         // get single rider info

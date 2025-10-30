@@ -152,10 +152,24 @@ async function run() {
         // get user payment history
         app.get('/payments/user', async (req, res) => {
             const userEmail = req.query.email;
+            const page = parseInt(req.query.page);
+            const limit = parseInt(req.query.limit);
+            const search = req.query.search;
+            const skip = (page - 1) * limit;
 
-            const result = await paymentsCollection.find({ userEmail: userEmail }).toArray();
+            const query = {
+                userEmail: userEmail,
+                ...({
+                    $or: [
+                        { transactionId: { $regex: search, $options: "i" } },
+                        { userEmail: { $regex: search, $options: "i" } },
+                    ]
+                })
+            }
 
-            res.send(result);
+            const result = await paymentsCollection.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray();
+            const totalPayments = await paymentsCollection.countDocuments(query);
+            res.send({ result, totalPayments });
         });
 
         // update parcel payment status
@@ -257,7 +271,28 @@ async function run() {
                 })
             };
             const result = await ridersCollection.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray();
-            const countRiders = await ridersCollection.estimatedDocumentCount(query);
+            const countRiders = await ridersCollection.countDocuments(query);
+            res.status(200).send({ result, countRiders });
+        })
+
+        // get all active riders and search active riders and pagination
+        app.get('/riders/active', async (req, res) => {
+            const page = parseInt(req.query.page);
+            const limit = parseInt(req.query.limit);
+            const search = req.query.search;
+            const skip = (page - 1) * limit;
+
+            const query = {
+                status: "active",
+                ...(search && {
+                    $or: [
+                        { email: { $regex: search, $options: "i" } },
+                        { phone: { $regex: search, $options: "i" } },
+                    ]
+                })
+            };
+            const result = await ridersCollection.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray();
+            const countRiders = await ridersCollection.countDocuments(query);
             res.status(200).send({ result, countRiders });
         })
 
@@ -272,15 +307,27 @@ async function run() {
             res.status(200).send(result);
         });
 
-        // update rider pending to active
-        app.patch("/riders/pending/:riderId", async (req, res) => {
+        // update rider status pending to active or active to pending
+        app.patch("/riders/status/:riderId", async (req, res) => {
             const { riderId } = req.params;
+            const makeStatus = req.body.makeStatus;
+            console.log('make status', makeStatus);
             const filter = { _id: new ObjectId(riderId) };
-            const update = {
-                $set: {
-                    status: "active"
-                }
-            };
+            let update = {}
+            if (makeStatus === "active") {
+                update = {
+                    $set: {
+                        status: "active"
+                    }
+                };
+            }
+            else if (makeStatus === "pending") {
+                update = {
+                    $set: {
+                        status: "pending"
+                    }
+                };
+            }
             const result = await ridersCollection.updateOne(filter, update);
             res.status(200).send(result);
         })

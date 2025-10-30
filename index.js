@@ -226,8 +226,26 @@ async function run() {
 
         // (users related apis)
 
+        // get all the user and search user
+        app.get('/users', async (req, res) => {
+            const search = req.query.search;
+            const page = parseInt(req.query.page);
+            const limit = parseInt(req.query.limit);
+            const skip = (page - 1) * limit;
+
+            const query = {
+                email: { $regex: search, $options: "i" }
+            }
+
+            const users = await usersCollection.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray();
+
+            const totalUsers = await usersCollection.countDocuments(query);
+
+            res.status(200).send({ users, totalUsers });
+        })
+
         // get single user info
-        app.get("/users", async (req, res) => {
+        app.get("/users/user", async (req, res) => {
             const { email } = req.query;
 
             if (!email) {
@@ -250,6 +268,32 @@ async function run() {
 
             const result = await usersCollection.insertOne(user);
             res.send(result);
+        })
+
+        // delete a user and also if the user is a rider
+        app.delete("/users/:userId", async (req, res) => {
+            const { userId } = req.params;
+            const { userEmail } = req.body;
+
+            console.log('userid and userEmail', userEmail);
+
+            const filter = { _id: new ObjectId(userId) };
+
+            if (!userId || !userEmail) {
+                return res.status(400).send({
+                    success: false,
+                    message: "Missing required fields"
+                });
+            }
+
+            const isExistedRider = await ridersCollection.findOne({ email: userEmail });
+
+            if (isExistedRider) {
+                const deleteRider = await ridersCollection.deleteOne({ email: userEmail });
+            }
+
+            const deleteUser = await usersCollection.deleteOne(filter);
+            res.status(204).send(deleteUser)
         })
 
         // (riders related apis)

@@ -310,11 +310,15 @@ async function run() {
         // update rider status pending to active or active to pending
         app.patch("/riders/status/:riderId", async (req, res) => {
             const { riderId } = req.params;
-            const makeStatus = req.body.makeStatus;
-            console.log('make status', makeStatus);
+            const { makeStatus, riderEmail } = req.body;
+
+            console.log('make status', riderEmail);
             const filter = { _id: new ObjectId(riderId) };
+
             let update = {}
+            let userRole = "";
             if (makeStatus === "active") {
+                userRole = "rider";
                 update = {
                     $set: {
                         status: "active"
@@ -322,14 +326,32 @@ async function run() {
                 };
             }
             else if (makeStatus === "pending") {
+                userRole = "user";
                 update = {
                     $set: {
                         status: "pending"
                     }
                 };
             }
-            const result = await ridersCollection.updateOne(filter, update);
-            res.status(200).send(result);
+
+            // update user role and rider status
+            const [userUpdateResult, riderUpdateResult] = await Promise.all([
+                usersCollection.updateOne({ email: riderEmail }, { $set: { role: userRole } }),
+                ridersCollection.updateOne(filter, update)
+            ]);
+
+            if (userUpdateResult.modifiedCount === 0 || riderUpdateResult.modifiedCount === 0) {
+                return res.status(400).send({ message: "failed to update user or rider status" })
+            }
+
+            res.status(200).send({
+                success: true,
+                message: `Rider status updated to ${makeStatus} successfully`,
+                data: {
+                    userUpdate: userUpdateResult,
+                    riderUpdate: riderUpdateResult
+                }
+            });
         })
 
         // post rider info in db

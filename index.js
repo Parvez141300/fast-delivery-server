@@ -83,7 +83,7 @@ async function run() {
         // (parcels related apis)
 
         // get users own parcels and search parcel and pagination
-        app.get("/parcels/user", async (req, res) => {
+        app.get("/parcels/user", verifyFirebaseToken, verifyRole(["user"]), async (req, res) => {
             const userEmail = req.query.email;
             const page = parseInt(req.query.page);
             const limit = parseInt(req.query.limit);
@@ -254,6 +254,33 @@ async function run() {
             const filter = { email: email }
             const result = await usersCollection.findOne(filter);
             res.status(200).send(result);
+        })
+
+        // make admin api route
+        app.patch("/users/role/:userId", async (req, res) => {
+            const { userId } = req.params;
+            const { newRole, userEmail } = req.body;
+
+            const filter = { _id: new ObjectId(userId) };
+
+            if (!userId || !newRole || !userEmail) {
+                return res.status(404).send({ message: "userId or newRole or UserEmail not found" });
+            }
+
+            let updateRole = {};
+            if (newRole === 'user') {
+                updateRole = {
+                    $set: { role: "user" }
+                }
+            }
+            else if (newRole === 'admin') {
+                updateRole = {
+                    $set: { role: "admin" }
+                }
+            }
+
+            const result = await usersCollection.updateOne(filter, updateRole);
+            res.send(result);
         })
 
         // post user info in db
